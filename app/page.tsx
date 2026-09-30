@@ -1,405 +1,326 @@
 'use client';
 import { useState } from 'react';
-import Board from '@/components/Board';
-import Dice from '@/components/Dice';
-import HUD from '@/components/HUD';
-import Cards from '@/components/Cards';
+import { useRouter } from 'next/navigation';
 import { FACTIONS } from '@/config/factions';
-import { TILES } from '@/config/tiles';
-import { rollGlobalEvent, GLOBAL_EVENTS } from '@/config/events';
+import { sfxClick, sfxBuy } from '@/utils/sfx';
 
-type Player = {
-  id: number;
-  name: string;
-  gold: number;
-  position: number;
-  faction: (typeof FACTIONS)[number];
-  eventImmune: number;
-};
+type GameMode = 'ai' | 'pvp';
 
-type Tile = (typeof TILES)[number] & { owner: number | null };
+export default function LandingPage() {
+  const router = useRouter();
+  const [mode, setMode] = useState<GameMode>('ai');
+  const [p1Faction, setP1Faction] = useState<string | null>(null);
+  const [p2Faction, setP2Faction] = useState<string | null>(null);
 
-type ModalState = {
-  show: boolean;
-  title: string;
-  message: string;
-  highlight?: string;
-  confirmText?: string;
-  cancelText?: string;
-  confirmColor?: string;
-  onConfirm?: () => void;
-  onCancel?: () => void;
-};
-
-export default function Home() {
-  const [players, setPlayers] = useState<Player[]>([
-    { id: 1, name: 'Player 1', gold: 1500, position: 0, faction: FACTIONS[1], eventImmune: 0 },
-    { id: 2, name: 'Player 2', gold: 1500, position: 0, faction: FACTIONS[2], eventImmune: 0 },
-  ]);
-
-  const [tiles, setTiles] = useState<Tile[]>(
-    TILES.map(t => ({ ...t, owner: null }))
-  );
-  const [turn, setTurn] = useState(1);
-  const [log, setLog] = useState<string[]>(['> Game dimulai. Player 1 maju duluan!']);
-  const [activeEvent, setActiveEvent] = useState<typeof GLOBAL_EVENTS[number] | null>(null);
-  const [winner, setWinner] = useState<Player | null>(null);
-
-  const [modal, setModal] = useState<ModalState>({ show: false, title: '', message: '' });
-
-  const addLog = (msg: string) =>
-    setLog(prev => [msg, ...prev].slice(0, 30));
-
-  const closeModal = () => setModal(m => ({ ...m, show: false }));
-
-  const endTurn = () => {
-    setTimeout(() => setTurn(t => (t === 1 ? 2 : 1)), 200);
-  };
-
-  // === CEK WIN CONDITION ===
-  const checkWin = (updatedTiles: Tile[]) => {
-    for (const p of players) {
-      const owned = updatedTiles.filter(t => t.owner === p.id && t.element);
-      const elements: Record<string, number> = {};
-      owned.forEach(t => {
-        if (t.element) elements[t.element] = (elements[t.element] || 0) + 1;
-      });
-      const won = Object.values(elements).some(count => count >= 3);
-      if (won) {
-        setWinner(p);
-        addLog(`🏆 ${p.name} MENANG dengan Domination Victory!`);
-        return true;
-      }
+  const handleStart = () => {
+    if (!p1Faction) {
+      alert('Pilih faksi Player 1 dulu!');
+      return;
     }
-    return false;
-  };
-
-  // === GLOBAL EVENT SAAT LEWAT START ===
-  const triggerGlobalEvent = () => {
-    const event = rollGlobalEvent();
-    setActiveEvent(event);
-
-    const isNegative = event.type === 'negative';
-    let immuneMsg = '';
-
-    // Efek langsung
-    setPlayers(prev =>
-      prev.map(p => {
-        // Arcane Council imun 1x
-        if (isNegative && p.faction.passive.type === 'eventImmunity' && p.eventImmune > 0) {
-          immuneMsg += `\n🛡️ ${p.name} (Arcane Council) imun terhadap ${event.name}!`;
-          return { ...p, eventImmune: p.eventImmune - 1 };
-        }
-
-        let goldDelta = 0;
-        if (event.effect === 'goldenAge') goldDelta = 150;
-        if (event.effect === 'economicCrisis') goldDelta = -Math.floor(p.gold * 0.1);
-
-        return { ...p, gold: Math.max(0, p.gold + goldDelta) };
-      })
-    );
-
-    addLog(`🎴 GLOBAL EVENT: ${event.emoji} ${event.name} — ${event.description}${immuneMsg}`);
-
-    setModal({
-      show: true,
-      title: `${event.emoji} Global Event: ${event.name}`,
-      message: event.description + immuneMsg,
-      highlight: `Tipe: ${event.type.toUpperCase()}`,
-      confirmText: 'Lanjut',
-      confirmColor: event.type === 'negative'
-        ? 'bg-red-500 hover:bg-red-600 text-white'
-        : 'bg-green-500 hover:bg-green-600 text-black',
-      onConfirm: () => {
-        closeModal();
-        endTurn();
-      },
-    });
-  };
-
-  // === ROLL DADU ===
-  const handleRoll = (d1: number, d2: number) => {
-    if (winner) return;
-
-    const steps = d1 + d2;
-    const currentPlayer = players.find(p => p.id === turn)!;
-    const oldPos = currentPlayer.position;
-    const newPos = (oldPos + steps) % tiles.length;
-    const passedStart = newPos < oldPos; // lewat tile 0
-    const landedTile = tiles[newPos];
-
-    addLog(`> ${currentPlayer.name} rolled ${d1} & ${d2} = ${steps}. Moved to ${landedTile.name}.`);
-
-    setPlayers(prev =>
-      prev.map(p => (p.id === turn ? { ...p, position: newPos } : p))
-    );
-
-    // Kalau lewat start → trigger event
-    if (passedStart) {
-      setTimeout(triggerGlobalEvent, 300);
+    if (mode === 'pvp' && !p2Faction) {
+      alert('Pilih faksi Player 2 dulu!');
+      return;
+    }
+    if (mode === 'pvp' && p1Faction === p2Faction) {
+      alert('Faksi P1 dan P2 tidak boleh sama!');
       return;
     }
 
-    // === LOGIKA TILE ===
-    if (landedTile.type === 'start') {
-      addLog(`> 🎁 ${currentPlayer.name} mendarat di Realm Hub. +200g bonus!`);
-      setPlayers(prev =>
-        prev.map(p => (p.id === turn ? { ...p, gold: p.gold + 200 } : p))
-      );
-      endTurn();
-      return;
-    }
+    sfxBuy();
+    localStorage.setItem('gameMode', mode);
+    localStorage.setItem('p1Faction', p1Faction);
 
-    if (landedTile.type === 'territory') {
-      // Kosong → Beli
-      if (landedTile.owner === null) {
-        const discount = currentPlayer.faction.passive.type === 'buyDiscount'
-          ? currentPlayer.faction.passive.value : 0;
-        const finalPrice = Math.floor(landedTile.price * (1 - discount));
-        const canAfford = currentPlayer.gold >= finalPrice;
-
-        setModal({
-          show: true,
-          title: `🏰 Beli ${landedTile.name}?`,
-          message: `Wilayah ${landedTile.element?.toUpperCase()} ini belum bertuan.`,
-          highlight: `Harga: ${finalPrice}g${discount > 0 ? ` (diskon ${Math.round(discount*100)}%)` : ''}\nGold: ${currentPlayer.gold}g`,
-          confirmText: canAfford ? '💰 Beli' : '❌ Gold Kurang',
-          confirmColor: canAfford
-            ? 'bg-green-500 hover:bg-green-600 text-black'
-            : 'bg-slate-600 text-slate-400 cursor-not-allowed',
-          cancelText: '⏭️ Skip',
-          onConfirm: canAfford
-            ? () => {
-                const updated = tiles.map((t, i) =>
-                  i === newPos ? { ...t, owner: turn } : t
-                );
-                setTiles(updated);
-                setPlayers(prev =>
-                  prev.map(p =>
-                    p.id === turn ? { ...p, gold: p.gold - finalPrice } : p
-                  )
-                );
-                addLog(`> ✅ ${currentPlayer.name} membeli ${landedTile.name} seharga ${finalPrice}g.`);
-                closeModal();
-                if (!checkWin(updated)) endTurn();
-              }
-            : undefined,
-          onCancel: () => {
-            addLog(`> ${currentPlayer.name} skip beli ${landedTile.name}.`);
-            closeModal();
-            endTurn();
-          },
-        });
-        return;
-      }
-
-      // Milik sendiri
-      if (landedTile.owner === turn) {
-        addLog(`> 🏠 ${currentPlayer.name} mendarat di wilayah sendiri.`);
-        endTurn();
-        return;
-      }
-
-      // Milik lawan → Sewa atau SIEGE
-      const owner = players.find(p => p.id === landedTile.owner)!;
-      const baseRent = Math.floor(landedTile.price * 0.1);
-      const rentDiscount = currentPlayer.faction.passive.type === 'rentDiscount'
-        ? currentPlayer.faction.passive.value : 0;
-      const finalRent = Math.floor(baseRent * (1 - rentDiscount));
-
-      setModal({
-        show: true,
-        title: `⚔️ Wilayah Lawan: ${landedTile.name}`,
-        message: `${landedTile.name} dikuasai ${owner.name}.\nPilih: bayar sewa, atau tantang SIEGE untuk rebut!`,
-        highlight: `Sewa: ${finalRent}g\nHadiah menang Siege: ${landedTile.name}\nDenda kalah: ${finalRent * 2}g`,
-        confirmText: '🔥 Tantang Siege',
-        confirmColor: 'bg-orange-500 hover:bg-orange-600 text-black',
-        cancelText: '💸 Bayar Sewa',
-        onConfirm: () => {
-          closeModal();
-          // Delay dulu biar modal nutup
-          setTimeout(() => initiateSiege(currentPlayer, owner, landedTile, newPos, finalRent), 300);
-        },
-        onCancel: () => {
-          setPlayers(prev =>
-            prev.map(p =>
-              p.id === turn ? { ...p, gold: p.gold - finalRent } :
-              p.id === owner.id ? { ...p, gold: p.gold + finalRent } : p
-            )
-          );
-          addLog(`> 💸 ${currentPlayer.name} bayar sewa ${finalRent}g ke ${owner.name}.`);
-          closeModal();
-          endTurn();
-        },
-      });
-      return;
-    }
-
-    // Tile lain
-    addLog(`> ${currentPlayer.name} mendarat di ${landedTile.name} (${landedTile.type}).`);
-    endTurn();
-  };
-
-  // === SIEGE ===
-  const initiateSiege = (
-    challenger: Player,
-    defender: Player,
-    tile: Tile,
-    tileIndex: number,
-    baseRent: number
-  ) => {
-    const cRoll = Math.floor(Math.random() * 6) + 1 + Math.floor(Math.random() * 6) + 1;
-    const dRoll = Math.floor(Math.random() * 6) + 1 + Math.floor(Math.random() * 6) + 1;
-
-    // Bonus faksi: Warlord +2, Rogue +1, Merchant +0, Arcane +1
-    const factionBonus: Record<string, number> = {
-      warlord: 2,
-      rogue: 1,
-      merchant: 0,
-      arcane: 1,
-    };
-    const cBonus = factionBonus[challenger.faction.id] || 0;
-    const dBonus = factionBonus[defender.faction.id] || 0;
-
-    const cTotal = cRoll + cBonus;
-    const dTotal = dRoll + dBonus;
-
-    const challengerWins = cTotal > dTotal;
-    const penalty = baseRent * 2;
-
-    if (challengerWins) {
-      const updated = tiles.map((t, i) =>
-        i === tileIndex ? { ...t, owner: challenger.id } : t
-      );
-      setTiles(updated);
-      addLog(`> 🏆 SIEGE MENANG! ${challenger.name} rebut ${tile.name} dari ${defender.name}. (${cTotal} vs ${dTotal})`);
-      setModal({
-        show: true,
-        title: `🏆 Siege Victory!`,
-        message: `Kamu berhasil merebut ${tile.name} dari ${defender.name}!`,
-        highlight: `Challenger: ${cTotal} (${cRoll}+${cBonus})\nDefender: ${dTotal} (${dRoll}+${dBonus})`,
-        confirmText: '🎉 Mantap',
-        confirmColor: 'bg-green-500 hover:bg-green-600 text-black',
-        onConfirm: () => {
-          closeModal();
-          if (!checkWin(updated)) endTurn();
-        },
-      });
+    if (mode === 'pvp' && p2Faction) {
+      localStorage.setItem('p2Faction', p2Faction);
     } else {
-      setPlayers(prev =>
-        prev.map(p =>
-          p.id === challenger.id ? { ...p, gold: p.gold - penalty } : p
-        )
-      );
-      addLog(`> ❌ SIEGE GAGAL. ${challenger.name} bayar denda ${penalty}g. (${cTotal} vs ${dTotal})`);
-      setModal({
-        show: true,
-        title: `❌ Siege Gagal`,
-        message: `${defender.name} mempertahankan ${tile.name}.\nKamu wajib bayar denda 2x sewa.`,
-        highlight: `Challenger: ${cTotal} (${cRoll}+${cBonus})\nDefender: ${dTotal} (${dRoll}+${dBonus})\nDenda: ${penalty}g`,
-        confirmText: '💸 Terima',
-        confirmColor: 'bg-red-500 hover:bg-red-600 text-white',
-        onConfirm: () => {
-          closeModal();
-          endTurn();
-        },
-      });
+      localStorage.removeItem('p2Faction'); // AI ambil random
     }
+
+    router.push('/game');
   };
 
-  // === RESTART ===
-  const restartGame = () => {
-    setPlayers([
-      { id: 1, name: 'Player 1', gold: 1500, position: 0, faction: FACTIONS[1], eventImmune: 1 },
-      { id: 2, name: 'Player 2', gold: 1500, position: 0, faction: FACTIONS[2], eventImmune: 0 },
-    ]);
-    setTiles(TILES.map(t => ({ ...t, owner: null })));
-    setTurn(1);
-    setLog(['> Game baru dimulai!']);
-    setActiveEvent(null);
-    setWinner(null);
-    setModal({ show: false, title: '', message: '' });
-  };
+  // Faksi yang bisa dipilih P2 (kalau P1 udah pilih)
+  const availableForP2 = FACTIONS.filter(f => f.id !== p1Faction);
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-4 md:p-6">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-3xl md:text-4xl font-bold text-amber-400 drop-shadow-lg">
-            ⚔️ Chrono Realms
-          </h1>
-          <button
-            onClick={restartGame}
-            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm"
-          >
-            🔄 Restart
-          </button>
-        </div>
-
-        <HUD players={players} turn={turn} />
-
-        {/* Event Banner */}
-        {activeEvent && (
-          <div className={`mb-4 px-4 py-2 rounded-lg text-sm font-semibold border-2 ${
-            activeEvent.type === 'positive'
-              ? 'bg-green-900/40 border-green-500 text-green-300'
-              : 'bg-red-900/40 border-red-500 text-red-300'
-          }`}>
-            {activeEvent.emoji} Event Active: <strong>{activeEvent.name}</strong> — {activeEvent.description}
-          </div>
-        )}
-
-        <Board players={players} tiles={tiles} />
-
-        <div className="mt-6 flex flex-col md:flex-row items-center justify-between gap-6 bg-slate-800 p-5 rounded-xl border border-slate-700">
-          <div className="text-center md:text-left">
-            <div className="text-sm text-slate-400">Giliran Sekarang</div>
-            <div className="text-2xl font-bold text-amber-400">Player {turn}</div>
-          </div>
-          <Dice onRoll={handleRoll} disabled={modal.show || !!winner} />
-        </div>
-
-        <div className="mt-6 bg-slate-800 p-4 rounded-xl border border-slate-700">
-          <div className="text-sm font-bold text-amber-400 mb-2">📜 Action Log</div>
-          <div className="h-40 overflow-y-auto text-sm space-y-1">
-            {log.map((line, i) => (
-              <div key={i} className="text-slate-300 font-mono text-xs">{line}</div>
-            ))}
-          </div>
-        </div>
+    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white overflow-hidden relative">
+      {/* Background Ornamen */}
+      <div className="absolute inset-0 opacity-10 pointer-events-none">
+        <div className="absolute top-10 left-10 text-9xl">⚔️</div>
+        <div className="absolute top-40 right-20 text-9xl">🏰</div>
+        <div className="absolute bottom-20 left-1/3 text-9xl">🎲</div>
+        <div className="absolute bottom-40 right-40 text-9xl">🔥</div>
       </div>
 
-      {/* Modal */}
-      <Cards
-        show={modal.show}
-        title={modal.title}
-        message={modal.message}
-        highlight={modal.highlight}
-        confirmText={modal.confirmText}
-        cancelText={modal.cancelText}
-        confirmColor={modal.confirmColor}
-        onConfirm={modal.onConfirm}
-        onCancel={modal.onCancel}
-      />
+      <div className="relative max-w-6xl mx-auto px-4 py-10">
+        {/* Hero */}
+        <div className="text-center mb-8">
+          <div className="text-6xl md:text-7xl mb-3 animate-bounce">⚔️</div>
+          <h1 className="text-4xl md:text-6xl font-bold text-amber-400 drop-shadow-2xl mb-3">
+            CHRONO REALMS
+          </h1>
+          <p className="text-base md:text-lg text-slate-300 max-w-2xl mx-auto">
+            Monopoli Strategy bertema Fantasy — rebut wilayah, kalahkan lawan, kuasai Realm!
+          </p>
+        </div>
 
-      {/* Winner Overlay */}
-      {winner && (
-        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[60] p-4">
-          <div className="bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl p-8 text-center max-w-md">
-            <div className="text-6xl mb-4">🏆</div>
-            <h2 className="text-3xl font-bold text-black mb-2">VICTORY!</h2>
-            <p className="text-black/80 mb-6">
-              <strong>{winner.name}</strong> memenangkan Chrono Realms!
-            </p>
+        {/* STEP 1: PILIH MODE */}
+        <div className="mb-8">
+          <h2 className="text-xl font-bold text-amber-400 mb-1 text-center">
+            🎮 Pilih Mode
+          </h2>
+          <p className="text-center text-xs text-slate-400 mb-4">
+            Langkah 1 dari 3
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto">
             <button
-              onClick={restartGame}
-              className="px-6 py-3 bg-black text-amber-400 font-bold rounded-lg hover:bg-slate-900"
+              onClick={() => {
+                sfxClick();
+                setMode('ai');
+                setP2Faction(null);
+              }}
+              className={`relative text-left bg-slate-800 rounded-xl p-5 border-2 transition-all hover:scale-105 ${
+                mode === 'ai'
+                  ? 'border-amber-400 shadow-lg shadow-amber-400/30 ring-2 ring-amber-400'
+                  : 'border-slate-700 hover:border-slate-500'
+              }`}
             >
-              🔄 Main Lagi
+              <div className="flex items-center gap-3">
+                <div className="text-4xl">🤖</div>
+                <div className="flex-1">
+                  <h3 className="font-bold text-lg">Solo vs AI</h3>
+                  <p className="text-xs text-slate-400">
+                    Main sendiri, lawan komputer
+                  </p>
+                </div>
+              </div>
+              {mode === 'ai' && (
+                <div className="absolute top-2 right-2 bg-amber-400 text-black text-xs font-bold px-2 py-1 rounded-full">
+                  ✓
+                </div>
+              )}
+            </button>
+
+            <button
+              onClick={() => {
+                sfxClick();
+                setMode('pvp');
+              }}
+              className={`relative text-left bg-slate-800 rounded-xl p-5 border-2 transition-all hover:scale-105 ${
+                mode === 'pvp'
+                  ? 'border-amber-400 shadow-lg shadow-amber-400/30 ring-2 ring-amber-400'
+                  : 'border-slate-700 hover:border-slate-500'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className="text-4xl">👥</div>
+                <div className="flex-1">
+                  <h3 className="font-bold text-lg">2 Player</h3>
+                  <p className="text-xs text-slate-400">
+                    Main berdua di device yang sama
+                  </p>
+                </div>
+              </div>
+              {mode === 'pvp' && (
+                <div className="absolute top-2 right-2 bg-amber-400 text-black text-xs font-bold px-2 py-1 rounded-full">
+                  ✓
+                </div>
+              )}
             </button>
           </div>
         </div>
-      )}
+
+        {/* STEP 2: PILIH FAKSI P1 */}
+        <div className="mb-8">
+          <h2 className="text-xl font-bold text-amber-400 mb-1 text-center">
+            🎭 Faksi Player 1
+          </h2>
+          <p className="text-center text-xs text-slate-400 mb-4">
+            Langkah 2 dari 3
+          </p>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {FACTIONS.map((faction) => {
+              const isSelected = p1Faction === faction.id;
+              const disabled = false;
+              return (
+                <button
+                  key={faction.id}
+                  onClick={() => {
+                    if (disabled) return;
+                    sfxClick();
+                    setP1Faction(faction.id);
+                    // Kalau P2 udah pilih faksi yang sama, reset P2
+                    if (p2Faction === faction.id) setP2Faction(null);
+                  }}
+                  disabled={disabled}
+                  className={`relative text-left bg-slate-800 rounded-xl p-4 border-2 transition-all hover:scale-105 ${
+                    isSelected
+                      ? 'border-amber-400 shadow-lg shadow-amber-400/30 ring-2 ring-amber-400'
+                      : 'border-slate-700 hover:border-slate-500'
+                  }`}
+                >
+                  <div
+                    className={`w-10 h-10 rounded-full ${faction.color} mb-2 flex items-center justify-center text-xl`}
+                  >
+                    {faction.id === 'merchant' && '💰'}
+                    {faction.id === 'warlord' && '⚔️'}
+                    {faction.id === 'rogue' && '🗡️'}
+                    {faction.id === 'arcane' && '🔮'}
+                  </div>
+                  <h3 className="font-bold text-sm mb-1">{faction.name}</h3>
+                  <p className="text-[10px] text-slate-400 leading-relaxed">
+                    {faction.description}
+                  </p>
+                  {isSelected && (
+                    <div className="absolute top-1.5 right-1.5 bg-amber-400 text-black text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                      ✓
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* STEP 3: PILIH FAKSI P2 (KALAU PVP) */}
+        {mode === 'pvp' && (
+          <div className="mb-8 animate-fadeIn">
+            <h2 className="text-xl font-bold text-amber-400 mb-1 text-center">
+              🎭 Faksi Player 2
+            </h2>
+            <p className="text-center text-xs text-slate-400 mb-4">
+              Langkah 3 dari 3 — Faksi berbeda dengan P1
+            </p>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {availableForP2.map((faction) => {
+                const isSelected = p2Faction === faction.id;
+                return (
+                  <button
+                    key={faction.id}
+                    onClick={() => {
+                      sfxClick();
+                      setP2Faction(faction.id);
+                    }}
+                    className={`relative text-left bg-slate-800 rounded-xl p-4 border-2 transition-all hover:scale-105 ${
+                      isSelected
+                        ? 'border-amber-400 shadow-lg shadow-amber-400/30 ring-2 ring-amber-400'
+                        : 'border-slate-700 hover:border-slate-500'
+                    }`}
+                  >
+                    <div
+                      className={`w-10 h-10 rounded-full ${faction.color} mb-2 flex items-center justify-center text-xl`}
+                    >
+                      {faction.id === 'merchant' && '💰'}
+                      {faction.id === 'warlord' && '⚔️'}
+                      {faction.id === 'rogue' && '🗡️'}
+                      {faction.id === 'arcane' && '🔮'}
+                    </div>
+                    <h3 className="font-bold text-sm mb-1">{faction.name}</h3>
+                    <p className="text-[10px] text-slate-400 leading-relaxed">
+                      {faction.description}
+                    </p>
+                    {isSelected && (
+                      <div className="absolute top-1.5 right-1.5 bg-amber-400 text-black text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                        ✓
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Info P2 buat mode AI */}
+        {mode === 'ai' && p1Faction && (
+          <div className="mb-8 animate-fadeIn">
+            <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700 max-w-2xl mx-auto text-center">
+              <div className="text-sm text-slate-300">
+                🤖 <strong>AI</strong> akan mendapat faksi random (bukan {FACTIONS.find(f => f.id === p1Faction)?.name})
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Cara Main */}
+        <div className="mb-8 bg-slate-800/50 rounded-xl p-5 border border-slate-700">
+          <h2 className="text-lg font-bold text-amber-400 mb-4 text-center">
+            📖 Cara Main
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 text-sm">
+            <div className="text-center">
+              <div className="text-3xl mb-2">🎲</div>
+              <div className="font-bold mb-1 text-amber-300">1. Lempar Dadu</div>
+              <p className="text-slate-400 text-xs">
+                Setiap turn lempar 2 dadu (total 2-12).
+              </p>
+            </div>
+            <div className="text-center">
+              <div className="text-3xl mb-2">🏰</div>
+              <div className="font-bold mb-1 text-amber-300">2. Beli / Rebut Wilayah</div>
+              <p className="text-slate-400 text-xs">
+                Beli wilayah kosong, atau tantang Siege!
+              </p>
+            </div>
+            <div className="text-center">
+              <div className="text-3xl mb-2">🏆</div>
+              <div className="font-bold mb-1 text-amber-300">3. Menang!</div>
+              <p className="text-slate-400 text-xs">
+                Kuasai 4 wilayah elemen sama atau capai 8000g.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Win Conditions */}
+        <div className="mb-8 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+          <div className="bg-slate-800 rounded-lg p-2.5 text-center border border-slate-700">
+            <div className="text-xl mb-1">🏆</div>
+            <div className="font-bold text-amber-400">Domination</div>
+            <div className="text-slate-400 text-[10px]">4 tile elemen sama</div>
+          </div>
+          <div className="bg-slate-800 rounded-lg p-2.5 text-center border border-slate-700">
+            <div className="text-xl mb-1">💰</div>
+            <div className="font-bold text-amber-400">Tycoon</div>
+            <div className="text-slate-400 text-[10px]">8000g / aset 5000g</div>
+          </div>
+          <div className="bg-slate-800 rounded-lg p-2.5 text-center border border-slate-700">
+            <div className="text-xl mb-1">💀</div>
+            <div className="font-bold text-amber-400">Elimination</div>
+            <div className="text-slate-400 text-[10px]">Lawan bangkrut</div>
+          </div>
+          <div className="bg-slate-800 rounded-lg p-2.5 text-center border border-slate-700">
+            <div className="text-xl mb-1">⏱️</div>
+            <div className="font-bold text-amber-400">Turn Limit</div>
+            <div className="text-slate-400 text-[10px]">Poin (40 turn)</div>
+          </div>
+        </div>
+
+        {/* CTA */}
+        <div className="text-center">
+          <button
+            onClick={handleStart}
+            disabled={!p1Faction || (mode === 'pvp' && !p2Faction)}
+            className={`px-10 py-4 text-lg font-bold rounded-xl transition-all shadow-2xl ${
+              p1Faction && (mode === 'ai' || p2Faction)
+                ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-black hover:scale-105'
+                : 'bg-slate-700 text-slate-500 cursor-not-allowed'
+            }`}
+          >
+            {!p1Faction
+              ? '👆 Pilih Faksi P1 Dulu'
+              : mode === 'pvp' && !p2Faction
+                ? '👆 Pilih Faksi P2 Dulu'
+                : `🎮 MULAI GAME (${mode === 'ai' ? 'vs AI' : '2 Player'})`}
+          </button>
+          <p className="text-xs text-slate-500 mt-3">
+            Dibuat dengan Next.js + Tailwind CSS
+          </p>
+        </div>
+      </div>
     </main>
   );
 }

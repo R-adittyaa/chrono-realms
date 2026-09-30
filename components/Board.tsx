@@ -5,47 +5,40 @@ type Player = {
   id: number;
   name: string;
   position: number;
-  faction: { color: string };
+  faction: { color: string; name: string };
 };
 
 type BoardProps = {
   players: Player[];
   tiles: typeof TILES;
+  onTileHover?: (tileId: number, position: { x: number; y: number } | null) => void;
 };
 
-// Layout papan 5x5 keliling (16 petak pinggir + 9 tengah kosong)
-const BOARD_SIZE = 5;
-const CENTER = { row: 3, col: 3 };
+const BOARD_SIZE = 6;
 
-export default function Board({ players, tiles }: BoardProps) {
-  // Mapping posisi tile ke koordinat grid 5x5 (keliling)
+export default function Board({ players, tiles, onTileHover }: BoardProps) {
   const getGridPosition = (index: number) => {
-    // 16 petak keliling 5x5 = total 16 tile
-    // Baris atas: 0-4 (tile 0-4), kolom kanan: 5-9, baris bawah: 10-14, kolom kiri: 15
     const positions = [
-      // Baris atas (kiri ke kanan)
-      { row: 1, col: 1 }, { row: 1, col: 2 }, { row: 1, col: 3 }, { row: 1, col: 4 }, { row: 1, col: 5 },
-      // Kolom kanan (atas ke bawah)
-      { row: 2, col: 5 }, { row: 3, col: 5 }, { row: 4, col: 5 }, { row: 5, col: 5 },
-      // Baris bawah (kanan ke kiri)
-      { row: 5, col: 4 }, { row: 5, col: 3 }, { row: 5, col: 2 }, { row: 5, col: 1 },
-      // Kolom kiri (bawah ke atas)
-      { row: 4, col: 1 }, { row: 3, col: 1 }, { row: 2, col: 1 },
+      { row: 1, col: 1 }, { row: 1, col: 2 }, { row: 1, col: 3 },
+      { row: 1, col: 4 }, { row: 1, col: 5 }, { row: 1, col: 6 },
+      { row: 2, col: 6 }, { row: 3, col: 6 }, { row: 4, col: 6 }, { row: 5, col: 6 },
+      { row: 6, col: 6 }, { row: 6, col: 5 }, { row: 6, col: 4 },
+      { row: 6, col: 3 }, { row: 6, col: 2 }, { row: 6, col: 1 },
+      { row: 5, col: 1 }, { row: 4, col: 1 }, { row: 3, col: 1 }, { row: 2, col: 1 },
     ];
     return positions[index] || { row: 1, col: 1 };
   };
 
   return (
-    <div className="bg-slate-900 p-3 rounded-2xl border-2 border-slate-700 shadow-2xl">
+    <div className="w-full max-w-[720px] mx-auto bg-slate-900 p-2 rounded-2xl border-2 border-slate-700 shadow-2xl">
       <div
-        className="grid gap-1.5"
+        className="grid gap-1"
         style={{
           gridTemplateColumns: `repeat(${BOARD_SIZE}, minmax(0, 1fr))`,
           gridTemplateRows: `repeat(${BOARD_SIZE}, minmax(0, 1fr))`,
           aspectRatio: '1 / 1',
         }}
       >
-        {/* Petak keliling */}
         {tiles.map((tile, index) => {
           const pos = getGridPosition(index);
           const playersHere = players.filter(p => p.position === tile.id);
@@ -59,60 +52,65 @@ export default function Board({ players, tiles }: BoardProps) {
           return (
             <div
               key={tile.id}
-              className={`relative bg-gradient-to-br ${elementGradient} rounded-md p-1.5 flex flex-col justify-between text-[10px] shadow-md border-2 transition-all hover:scale-105 ${
-                ownerPlayer ? 'border-yellow-400 shadow-yellow-400/30' : 'border-slate-700/50'
-              }`}
-              style={{
-                gridRow: pos.row,
-                gridColumn: pos.col,
+              onMouseEnter={(e) => {
+                if (onTileHover) onTileHover(tile.id, { x: e.clientX, y: e.clientY });
               }}
+              onMouseMove={(e) => {
+                if (onTileHover) onTileHover(tile.id, { x: e.clientX, y: e.clientY });
+              }}
+              onMouseLeave={() => {
+                if (onTileHover) onTileHover(tile.id, null);
+              }}
+              className={`relative bg-gradient-to-br ${elementGradient} rounded p-1 flex flex-col justify-between shadow border-2 transition-all hover:scale-105 hover:z-10 cursor-help ${
+                ownerPlayer ? 'border-yellow-400' : 'border-slate-700/40'
+              }`}
+              style={{ gridRow: pos.row, gridColumn: pos.col }}
             >
-              <div className="font-bold text-white leading-tight truncate">
+              <div className="font-bold text-white text-[9px] leading-tight truncate">
                 {tile.name}
               </div>
 
               {tile.price > 0 && (
-                <div className="text-yellow-200 font-semibold text-[9px]">
+                <div className="text-yellow-100 font-semibold text-[8px]">
                   {tile.price}g
                 </div>
               )}
 
               {ownerPlayer && (
                 <div
-                  className={`absolute top-0.5 right-0.5 w-3 h-3 rounded-full ${ownerPlayer.faction.color} border border-white/70`}
-                  title={`Owned by ${ownerPlayer.name}`}
+                  className={`absolute top-0.5 right-0.5 w-2.5 h-2.5 rounded-full ${ownerPlayer.faction.color} border border-white`}
+                  title={`Milik ${ownerPlayer.name}`}
                 />
               )}
 
-              {/* Token pemain */}
-              <div className="absolute bottom-0.5 right-0.5 flex gap-0.5 flex-wrap max-w-[80%] justify-end">
+              <div className="absolute inset-x-0 bottom-0 flex gap-0.5 justify-center items-center pb-0.5">
                 {playersHere.map(p => (
                   <span
                     key={p.id}
-                    className={`w-2.5 h-2.5 rounded-full ${p.faction.color} border border-white shadow-md animate-bounce`}
+                    className={`w-4 h-4 rounded-full ${p.faction.color} border-2 border-white shadow-lg ring-2 ring-black/40 flex items-center justify-center text-[8px] font-bold text-white`}
                     title={p.name}
-                  />
+                  >
+                    P{p.id}
+                  </span>
                 ))}
               </div>
             </div>
           );
         })}
 
-        {/* Area Tengah (Dice Box + Info) */}
+        {/* Area Tengah */}
         <div
-          className="bg-slate-800/80 rounded-xl border-2 border-amber-500/30 flex flex-col items-center justify-center p-4"
+          className="bg-slate-800 rounded-xl border-2 border-amber-500/40 flex flex-col items-center justify-center p-3"
           style={{
-            gridRow: `${CENTER.row - 1} / span 3`,
-            gridColumn: `${CENTER.col - 1} / span 3`,
+            gridRow: '2 / span 4',
+            gridColumn: '2 / span 4',
           }}
         >
-          <div className="text-4xl mb-2">⚔️</div>
-          <div className="text-amber-400 font-bold text-sm md:text-base text-center">
+          <div className="text-3xl md:text-4xl">⚔️</div>
+          <div className="text-amber-400 font-bold text-sm md:text-base text-center mt-1">
             CHRONO REALMS
           </div>
-          <div className="text-slate-400 text-[10px] text-center mt-1">
-            Roll dadu untuk mulai
-          </div>
+          <div className="text-slate-500 text-[10px] mt-1">20 Territories</div>
         </div>
       </div>
     </div>
