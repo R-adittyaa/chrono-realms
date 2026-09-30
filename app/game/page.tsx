@@ -5,6 +5,8 @@ import Board from '@/components/Board';
 import Dice from '@/components/Dice';
 import Cards from '@/components/Cards';
 import PlayerPanel from '@/components/PlayerPanel';
+import MobilePlayerTabs from '@/components/MobilePlayerTabs';
+import CollapsibleLog from '@/components/CollapsibleLog';
 import ToastContainer, { Toast, ToastType } from '@/components/Toast';
 import TileTooltip from '@/components/TileTooltip';
 import { FACTIONS } from '@/config/factions';
@@ -96,7 +98,6 @@ function createNewTiles(): Tile[] {
 export default function GamePage() {
   const router = useRouter();
 
-  // === STATE ===
   const [players, setPlayers] = useState<Player[]>(() => createNewPlayers(true));
   const [tiles, setTiles] = useState<Tile[]>(createNewTiles);
   const [turn, setTurn] = useState(1);
@@ -114,11 +115,11 @@ export default function GamePage() {
 
   const [isAnimating, setIsAnimating] = useState(false);
 
-  // === TOAST ===
+  // TOAST
   const [toasts, setToasts] = useState<Toast[]>([]);
   const toastIdRef = useRef(0);
 
-  // === TOOLTIP ===
+  // TOOLTIP
   const [hoveredTile, setHoveredTile] = useState<number | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const tooltipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -132,7 +133,6 @@ export default function GamePage() {
     setToasts(prev => prev.filter(t => t.id !== id));
   };
 
-  // === TOOLTIP HANDLER ===
   const handleTileHover = (
     tileId: number,
     position: { x: number; y: number } | null
@@ -279,7 +279,7 @@ export default function GamePage() {
     });
   };
 
-  // === LOGIKA TILE SETELAH MENDARAT ===
+  // === LANDING ===
   const processLanding = (
     currentPlayer: Player,
     newPos: number,
@@ -305,7 +305,6 @@ export default function GamePage() {
     }
 
     if (landedTile.type === 'territory') {
-      // KOSONG
       if (landedTile.owner === null) {
         const discount = currentPlayer.faction.passive.type === 'buyDiscount'
           ? currentPlayer.faction.passive.value : 0;
@@ -456,7 +455,7 @@ export default function GamePage() {
     endTurn();
   };
 
-  // === ROLL DADU + ANIMASI ===
+  // === ROLL ===
   const handleRoll = (d1: number, d2: number) => {
     if (winner) return;
     if (!readyToPlay) return;
@@ -672,41 +671,36 @@ export default function GamePage() {
     currentTurnPlayer?.isAI === true;
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-3 md:p-4">
+    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-2 md:p-4">
       <div className="max-w-[1400px] mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl md:text-3xl font-bold text-amber-400 drop-shadow-lg">
+        <div className="flex items-center justify-between mb-2 md:mb-3 flex-wrap gap-2">
+          <div className="flex items-center gap-2 md:gap-3 flex-wrap">
+            <h1 className="text-xl md:text-3xl font-bold text-amber-400 drop-shadow-lg">
               ⚔️ Chrono Realms
             </h1>
-            <div className={`px-3 py-1 rounded-lg text-sm font-bold border-2 ${
+            <div className={`px-2 md:px-3 py-0.5 md:py-1 rounded-lg text-xs md:text-sm font-bold border-2 ${
               turnCount >= 35
                 ? 'bg-red-900/40 border-red-500 text-red-300 animate-pulse'
                 : turnCount >= 25
                   ? 'bg-yellow-900/40 border-yellow-500 text-yellow-300'
                   : 'bg-slate-700 border-slate-600 text-slate-300'
             }`}>
-              ⏱️ Turn {turnCount} / {MAX_TURNS}
+              ⏱️ {turnCount}/{MAX_TURNS}
             </div>
             {aiIsThinking && (
-              <div className="px-3 py-1 rounded-lg text-xs font-bold bg-purple-900/40 border border-purple-500 text-purple-300 animate-pulse">
-                🤖 AI berpikir...
-              </div>
-            )}
-            {isAnimating && (
-              <div className="px-3 py-1 rounded-lg text-xs font-bold bg-blue-900/40 border border-blue-500 text-blue-300 animate-pulse">
-                🚶 Token bergerak...
+              <div className="px-2 py-0.5 rounded-lg text-[10px] md:text-xs font-bold bg-purple-900/40 border border-purple-500 text-purple-300 animate-pulse">
+                🤖 AI...
               </div>
             )}
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-1.5 md:gap-2">
             <button
               onClick={() => {
                 sfxClick();
                 router.push('/');
               }}
-              className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm"
+              className="px-2 md:px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs md:text-sm"
             >
               🏠 Menu
             </button>
@@ -717,7 +711,7 @@ export default function GamePage() {
                   restartGame();
                 }
               }}
-              className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm"
+              className="px-2 md:px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs md:text-sm"
             >
               🔄 Restart
             </button>
@@ -726,22 +720,28 @@ export default function GamePage() {
 
         {/* Banner Event */}
         {activeEvent && (
-          <div className={`mb-3 px-4 py-2 rounded-lg text-sm font-semibold border-2 flex items-center gap-2 ${
+          <div className={`mb-2 md:mb-3 px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-xs md:text-sm font-semibold border-2 flex items-center gap-2 ${
             activeEvent.type === 'positive'
               ? 'bg-green-900/40 border-green-500 text-green-300'
               : 'bg-red-900/40 border-red-500 text-red-300'
           }`}>
-            <span className="text-xl">{activeEvent.emoji}</span>
-            <div>
+            <span className="text-base md:text-xl">{activeEvent.emoji}</span>
+            <div className="flex-1 min-w-0">
               <span className="font-bold">{activeEvent.name}</span>
-              <span className="ml-2 opacity-80 text-xs">{activeEvent.description}</span>
+              <span className="ml-1 md:ml-2 opacity-80 text-[10px] md:text-xs hidden sm:inline">
+                {activeEvent.description}
+              </span>
             </div>
           </div>
         )}
 
-        {/* Layout 3 Kolom */}
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(200px,240px)_minmax(0,720px)_minmax(200px,240px)] gap-4 justify-center">
-          <div className="lg:sticky lg:top-4 lg:self-start">
+        {/* 📱 MOBILE: Tabs Player */}
+        <MobilePlayerTabs players={players} tiles={tiles} turn={turn} />
+
+        {/* Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(200px,240px)_minmax(0,720px)_minmax(200px,240px)] gap-3 md:gap-4 justify-center">
+          {/* Desktop P1 */}
+          <div className="hidden lg:block lg:sticky lg:top-4 lg:self-start">
             <PlayerPanel
               player={players[0]}
               tiles={tiles}
@@ -749,14 +749,14 @@ export default function GamePage() {
             />
           </div>
 
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2 md:gap-3">
             <Board
               players={players}
               tiles={tiles}
               onTileHover={handleTileHover}
             />
 
-            <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 flex flex-col items-center">
+            <div className="bg-slate-800 p-3 md:p-4 rounded-xl border border-slate-700 flex flex-col items-center">
               <Dice
                 onRoll={handleRoll}
                 disabled={diceDisabled}
@@ -764,7 +764,11 @@ export default function GamePage() {
               />
             </div>
 
-            <div className="bg-slate-800 p-3 rounded-xl border border-slate-700">
+            {/* 📱 MOBILE: Collapsible Log */}
+            <CollapsibleLog log={log} />
+
+            {/* 💻 DESKTOP: Regular Log */}
+            <div className="hidden lg:block bg-slate-800 p-3 rounded-xl border border-slate-700">
               <div className="text-sm font-bold text-amber-400 mb-2">📜 Action Log</div>
               <div className="h-32 overflow-y-auto text-sm space-y-1">
                 {log.map((line, i) => (
@@ -774,7 +778,8 @@ export default function GamePage() {
             </div>
           </div>
 
-          <div className="lg:sticky lg:top-4 lg:self-start">
+          {/* Desktop P2 */}
+          <div className="hidden lg:block lg:sticky lg:top-4 lg:self-start">
             <PlayerPanel
               player={players[1]}
               tiles={tiles}
@@ -800,32 +805,34 @@ export default function GamePage() {
       {/* Toast */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
-      {/* Tooltip */}
-      <TileTooltip
-        tile={hoveredTile !== null ? tiles[hoveredTile] : null}
-        players={players}
-        position={tooltipPos}
-      />
+      {/* Tooltip — cuma desktop */}
+      <div className="hidden lg:block">
+        <TileTooltip
+          tile={hoveredTile !== null ? tiles[hoveredTile] : null}
+          players={players}
+          position={tooltipPos}
+        />
+      </div>
 
       {/* Winner Overlay */}
       {winner && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[60] p-4">
-          <div className="bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl p-8 text-center max-w-md">
-            <div className="text-6xl mb-4">🏆</div>
-            <h2 className="text-3xl font-bold text-black mb-2">VICTORY!</h2>
-            <p className="text-black/80 mb-2">
+          <div className="bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl p-6 md:p-8 text-center max-w-md">
+            <div className="text-5xl md:text-6xl mb-4">🏆</div>
+            <h2 className="text-2xl md:text-3xl font-bold text-black mb-2">VICTORY!</h2>
+            <p className="text-black/80 mb-2 text-sm md:text-base">
               <strong>{winner.name}</strong> memenangkan Chrono Realms!
             </p>
-            <p className="text-black/60 text-sm mb-6 font-semibold">
+            <p className="text-black/60 text-xs md:text-sm mb-6 font-semibold">
               {winCondition} Victory
             </p>
-            <div className="flex gap-3 justify-center">
+            <div className="flex gap-2 md:gap-3 justify-center">
               <button
                 onClick={() => {
                   sfxClick();
                   restartGame();
                 }}
-                className="px-5 py-3 bg-black text-amber-400 font-bold rounded-lg hover:bg-slate-900"
+                className="px-4 md:px-5 py-2.5 md:py-3 bg-black text-amber-400 font-bold rounded-lg hover:bg-slate-900 text-sm md:text-base"
               >
                 🔄 Main Lagi
               </button>
@@ -834,7 +841,7 @@ export default function GamePage() {
                   sfxClick();
                   router.push('/');
                 }}
-                className="px-5 py-3 bg-white/20 text-white font-bold rounded-lg hover:bg-white/30"
+                className="px-4 md:px-5 py-2.5 md:py-3 bg-white/20 text-white font-bold rounded-lg hover:bg-white/30 text-sm md:text-base"
               >
                 🏠 Menu
               </button>
